@@ -1,8 +1,16 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from datetime import datetime
 import os
 
 app = Flask(__name__)
+# Configuração explícita do CORS para permitir todas as origens, métodos e headers
+CORS(app, 
+     resources={r"/*": {
+         "origins": "*",
+         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         "allow_headers": ["Content-Type", "Authorization", "X-API-Key"]
+     }})
 
 # Segurança simples por token
 API_KEY = os.environ.get("API_KEY", "MINHA_CHAVE")
