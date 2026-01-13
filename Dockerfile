@@ -20,5 +20,5 @@ EXPOSE 5000
 ENV FLASK_APP=app.py
 ENV PYTHONUNBUFFERED=1
 
-# Comando para executar a aplicação
-CMD ["python", "app.py"]
+# Comando para executar a aplicação com Gunicorn (servidor WSGI de produção)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "2", "--timeout", "120", "app:app"]
