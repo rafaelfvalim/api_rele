@@ -17,8 +17,8 @@ CORS(app,
 API_KEY = os.environ.get("API_KEY", "MINHA_CHAVE")
 
 # Configuração da API externa de monitoramento
-EXTERNAL_API_URL = os.environ.get("EXTERNAL_API_URL", "https://sites-automator.aal5pu.easypanel.host/chart")
-EXTERNAL_API_KEY = os.environ.get("EXTERNAL_API_KEY", "XCYtkWPr9rAEaSiSlNItD5rJg6hRYWfe")
+EXTERNAL_API_URL = os.environ.get("EXTERNAL_API_URL", "https://teste.net")
+EXTERNAL_API_KEY = os.environ.get("EXTERNAL_API_KEY", "123456789")
 
 # Estado desejado e último estado aplicado (em memória)
 STATE = {
@@ -168,9 +168,16 @@ def post_rele():
 
     data = request.get_json(silent=True) or {}
     applied = data.get("applied")
+    desired = data.get("desired")  # Campo opcional para definir manualmente o estado desejado
 
     if applied not in ("on", "off"):
         return jsonify(ok=False, error="invalid_applied", hint="applied must be 'on' or 'off'"), 400
+
+    # Se desired for fornecido, valida e atualiza o estado desejado manualmente
+    if desired is not None:
+        if desired not in ("on", "off"):
+            return jsonify(ok=False, error="invalid_desired", hint="desired must be 'on' or 'off'"), 400
+        STATE["desired"] = desired
 
     STATE["last_applied"] = applied
     STATE["last_seen"] = datetime.now().isoformat(timespec="seconds")
