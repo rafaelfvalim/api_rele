@@ -85,19 +85,20 @@ def fetch_pm25_data():
 def detect_drastic_increase(pm25_values):
     """
     Detecta aumento drástico de 5 ou mais no pm25 entre leituras consecutivas.
-    Retorna True se detectar aumento drástico, False caso contrário.
+    Retorna (True, aumento, valor_anterior, valor_atual) se detectar aumento drástico,
+    (False, None, None, None) caso contrário.
     """
     if not pm25_values or len(pm25_values) < 2:
-        return False
+        return False, None, None, None
     
     # Verifica aumentos consecutivos de 5 ou mais
     for i in range(1, len(pm25_values)):
         increase = pm25_values[i] - pm25_values[i-1]
         if increase >= 5:
             print(f"[INFO] Aumento drástico detectado: {pm25_values[i-1]} -> {pm25_values[i]} (aumento de {increase})")
-            return True
+            return True, increase, pm25_values[i-1], pm25_values[i]
     
-    return False
+    return False, None, None, None
 
 def compute_desired_state():
     """
@@ -124,21 +125,32 @@ def get_rele():
     # Busca dados de pm25 da API externa e detecta aumento drástico
     pm25_values = fetch_pm25_data()
     has_drastic_increase = False
+    increase_amount = None
+    previous_value = None
+    current_value = None
     
     if pm25_values:
-        has_drastic_increase = detect_drastic_increase(pm25_values)
+        has_drastic_increase, increase_amount, previous_value, current_value = detect_drastic_increase(pm25_values)
         if has_drastic_increase:
             # Quando detecta aumento drástico, atualiza last_applied para "on"
             STATE["last_applied"] = "on"
             STATE["last_seen"] = datetime.now().isoformat(timespec="seconds")
 
-    return jsonify(
-        ok=True,
-        desired=STATE["desired"],
-        last_applied=STATE["last_applied"],
-        last_seen=STATE["last_seen"],
-        pm25_detected_increase=has_drastic_increase
-    ), 200
+    response_data = {
+        "ok": True,
+        "desired": STATE["desired"],
+        "last_applied": STATE["last_applied"],
+        "last_seen": STATE["last_seen"],
+        "pm25_detected_increase": has_drastic_increase
+    }
+    
+    # Adiciona informações de debug sobre o aumento detectado
+    if has_drastic_increase:
+        response_data["pm25_increase_amount"] = increase_amount
+        response_data["pm25_previous_value"] = previous_value
+        response_data["pm25_current_value"] = current_value
+    
+    return jsonify(response_data), 200
 
 @app.post("/rele")
 def post_rele():
