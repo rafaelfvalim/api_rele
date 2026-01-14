@@ -24,7 +24,8 @@ EXTERNAL_API_KEY = os.environ.get("EXTERNAL_API_KEY", "123456789")
 STATE = {
     "desired": "off",
     "last_applied": "off",
-    "last_seen": None
+    "last_seen": None,
+    "manual_desired_used": False  # Flag para rastrear se o desired manual já foi usado uma vez
 }
 
 def _validate_api_key():
@@ -119,30 +120,37 @@ def get_rele():
             hint="Envie api_key via querystring (?api_key=...), form, JSON ou header X-API-Key"
         ), 401
 
-    # Sempre recalcula o desired baseado na detecção de pm25 (ignora qualquer valor manual do POST)
-    # Busca dados de pm25 da API externa e detecta aumento drástico
+    # Busca dados de pm25 para análise
     pm25_values = fetch_pm25_data()
     has_drastic_increase = False
     increase_amount = None
     previous_value = None
     current_value = None
     
-    # Recalcula desired baseado na detecção de pm25
     if pm25_values:
         has_drastic_increase, increase_amount, previous_value, current_value = detect_drastic_increase(pm25_values)
-        # Se detecta aumento drástico, desired é "on", caso contrário é "off"
-        if has_drastic_increase:
-            STATE["desired"] = "on"
-            STATE["last_applied"] = "on"
-            STATE["last_seen"] = datetime.now().isoformat(timespec="seconds")
-        else:
-            STATE["desired"] = "off"
-            STATE["last_applied"] = "off"
+    
+    # Se o desired foi definido manualmente e ainda não foi usado, retorna o valor manual
+    if not STATE["manual_desired_used"]:
+        # Primeira execução depois do POST manual: retorna o valor definido manualmente
+        STATE["manual_desired_used"] = True  # Marca como usado
+        # Mantém o desired atual (definido pelo POST)
     else:
-        # Se não conseguir buscar dados da API, usa a lógica inicial (horário)
-        desired = compute_desired_state()
-        STATE["desired"] = desired
-        # Mantém o valor atual de last_applied se não conseguir buscar dados
+        # A partir da segunda execução: recalcula baseado na detecção de pm25
+        if pm25_values:
+            # Se detecta aumento drástico, desired é "on", caso contrário é "off"
+            if has_drastic_increase:
+                STATE["desired"] = "on"
+                STATE["last_applied"] = "on"
+                STATE["last_seen"] = datetime.now().isoformat(timespec="seconds")
+            else:
+                STATE["desired"] = "off"
+                STATE["last_applied"] = "off"
+        else:
+            # Se não conseguir buscar dados da API, usa a lógica inicial (horário)
+            desired = compute_desired_state()
+            STATE["desired"] = desired
+            # Mantém o valor atual de last_applied se não conseguir buscar dados
 
     response_data = {
         "ok": True,
@@ -182,6 +190,7 @@ def post_rele():
         if desired not in ("on", "off"):
             return jsonify(ok=False, error="invalid_desired", hint="desired must be 'on' or 'off'"), 400
         STATE["desired"] = desired
+        STATE["manual_desired_used"] = False  # Reseta a flag para permitir que o próximo GET use o valor manual
 
     STATE["last_applied"] = applied
     STATE["last_seen"] = datetime.now().isoformat(timespec="seconds")
