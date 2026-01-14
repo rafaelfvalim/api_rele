@@ -131,10 +131,14 @@ def get_rele():
     
     if pm25_values:
         has_drastic_increase, increase_amount, previous_value, current_value = detect_drastic_increase(pm25_values)
+        # last_applied só é "on" quando detecta aumento drástico
         if has_drastic_increase:
-            # Quando detecta aumento drástico, atualiza last_applied para "on"
             STATE["last_applied"] = "on"
             STATE["last_seen"] = datetime.now().isoformat(timespec="seconds")
+        else:
+            # Se não detecta aumento, define como "off"
+            STATE["last_applied"] = "off"
+    # Se não conseguir buscar dados da API, mantém o valor atual de last_applied
 
     response_data = {
         "ok": True,
