@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
 import os
+import requests
 
 app = Flask(__name__)
 # Configuração explícita do CORS para permitir todas as origens, métodos e headers
@@ -14,6 +15,10 @@ CORS(app,
 
 # Segurança simples por token
 API_KEY = os.environ.get("API_KEY", "MINHA_CHAVE")
+
+# Configuração da API externa de monitoramento
+EXTERNAL_API_URL = os.environ.get("EXTERNAL_API_URL", "https://sites-automator.aal5pu.easypanel.host/chart")
+EXTERNAL_API_KEY = os.environ.get("EXTERNAL_API_KEY", "XCYtkWPr9rAEaSiSlNItD5rJg6hRYWfe")
 
 # Estado desejado e último estado aplicado (em memória)
 STATE = {
@@ -56,6 +61,44 @@ def _validate_api_key():
         return False, None
     return True, final_key
 
+def fetch_pm25_data():
+    """
+    Busca dados de pm25 da API externa.
+    Retorna lista de valores de pm25 ou None em caso de erro.
+    """
+    try:
+        url = f"{EXTERNAL_API_URL}?last_minutes=15&api_key={EXTERNAL_API_KEY}"
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("ok") and "series" in data:
+            pm25_values = data["series"].get("pm25", [])
+            # Remove valores None e converte para float
+            pm25_values = [float(v) for v in pm25_values if v is not None]
+            return pm25_values
+        return None
+    except Exception as e:
+        print(f"[ERROR] Erro ao buscar dados da API externa: {e}")
+        return None
+
+def detect_drastic_increase(pm25_values):
+    """
+    Detecta aumento drástico de 5 ou mais no pm25 entre leituras consecutivas.
+    Retorna True se detectar aumento drástico, False caso contrário.
+    """
+    if not pm25_values or len(pm25_values) < 2:
+        return False
+    
+    # Verifica aumentos consecutivos de 5 ou mais
+    for i in range(1, len(pm25_values)):
+        increase = pm25_values[i] - pm25_values[i-1]
+        if increase >= 5:
+            print(f"[INFO] Aumento drástico detectado: {pm25_values[i-1]} -> {pm25_values[i]} (aumento de {increase})")
+            return True
+    
+    return False
+
 def compute_desired_state():
     """
     Exemplo de regra: liga entre 08:00 e 20:00, fora disso desliga.
@@ -77,12 +120,24 @@ def get_rele():
 
     desired = compute_desired_state()
     STATE["desired"] = desired
+    
+    # Busca dados de pm25 da API externa e detecta aumento drástico
+    pm25_values = fetch_pm25_data()
+    has_drastic_increase = False
+    
+    if pm25_values:
+        has_drastic_increase = detect_drastic_increase(pm25_values)
+        if has_drastic_increase:
+            # Quando detecta aumento drástico, atualiza last_applied para "on"
+            STATE["last_applied"] = "on"
+            STATE["last_seen"] = datetime.now().isoformat(timespec="seconds")
 
     return jsonify(
         ok=True,
         desired=STATE["desired"],
         last_applied=STATE["last_applied"],
-        last_seen=STATE["last_seen"]
+        last_seen=STATE["last_seen"],
+        pm25_detected_increase=has_drastic_increase
     ), 200
 
 @app.post("/rele")
