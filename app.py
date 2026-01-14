@@ -119,9 +119,7 @@ def get_rele():
             hint="Envie api_key via querystring (?api_key=...), form, JSON ou header X-API-Key"
         ), 401
 
-    desired = compute_desired_state()
-    STATE["desired"] = desired
-    
+    # Sempre recalcula o desired baseado na detecção de pm25 (ignora qualquer valor manual do POST)
     # Busca dados de pm25 da API externa e detecta aumento drástico
     pm25_values = fetch_pm25_data()
     has_drastic_increase = False
@@ -129,16 +127,22 @@ def get_rele():
     previous_value = None
     current_value = None
     
+    # Recalcula desired baseado na detecção de pm25
     if pm25_values:
         has_drastic_increase, increase_amount, previous_value, current_value = detect_drastic_increase(pm25_values)
-        # last_applied só é "on" quando detecta aumento drástico
+        # Se detecta aumento drástico, desired é "on", caso contrário é "off"
         if has_drastic_increase:
+            STATE["desired"] = "on"
             STATE["last_applied"] = "on"
             STATE["last_seen"] = datetime.now().isoformat(timespec="seconds")
         else:
-            # Se não detecta aumento, define como "off"
+            STATE["desired"] = "off"
             STATE["last_applied"] = "off"
-    # Se não conseguir buscar dados da API, mantém o valor atual de last_applied
+    else:
+        # Se não conseguir buscar dados da API, usa a lógica inicial (horário)
+        desired = compute_desired_state()
+        STATE["desired"] = desired
+        # Mantém o valor atual de last_applied se não conseguir buscar dados
 
     response_data = {
         "ok": True,
