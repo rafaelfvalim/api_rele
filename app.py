@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+sfrom flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
 import os
@@ -85,17 +85,17 @@ def fetch_pm25_data():
 
 def detect_drastic_increase(pm25_values):
     """
-    Detecta aumento drástico de 5 ou mais no pm25 entre leituras consecutivas.
+    Detecta aumento drástico de 15 ou mais no pm25 entre leituras consecutivas.
     Retorna (True, aumento, valor_anterior, valor_atual) se detectar aumento drástico,
     (False, None, None, None) caso contrário.
     """
     if not pm25_values or len(pm25_values) < 2:
         return False, None, None, None
     
-    # Verifica aumentos consecutivos de 5 ou mais
+    # Verifica aumentos consecutivos de 15 ou mais
     for i in range(1, len(pm25_values)):
         increase = pm25_values[i] - pm25_values[i-1]
-        if increase >= 5:
+        if increase >= 15:
             print(f"[INFO] Aumento drástico detectado: {pm25_values[i-1]} -> {pm25_values[i]} (aumento de {increase})")
             return True, increase, pm25_values[i-1], pm25_values[i]
     
