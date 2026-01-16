@@ -86,19 +86,35 @@ def fetch_pm25_data():
 def detect_drastic_increase(pm25_values):
     """
     Detecta aumento drástico de 15 ou mais no pm25 entre leituras consecutivas.
+    Verifica todos os aumentos e retorna o maior aumento encontrado.
     Retorna (True, aumento, valor_anterior, valor_atual) se detectar aumento drástico,
     (False, None, None, None) caso contrário.
     """
     if not pm25_values or len(pm25_values) < 2:
         return False, None, None, None
     
-    # Verifica aumentos consecutivos de 15 ou mais
+    # Debug: mostra os valores recebidos
+    print(f"[DEBUG] Valores pm25 recebidos: {pm25_values}")
+    print(f"[DEBUG] Total de valores: {len(pm25_values)}")
+    
+    # Verifica todos os aumentos consecutivos e encontra o maior
+    max_increase = 0
+    max_previous = None
+    max_current = None
+    
     for i in range(1, len(pm25_values)):
         increase = pm25_values[i] - pm25_values[i-1]
-        if increase >= 15:
-            print(f"[INFO] Aumento drástico detectado: {pm25_values[i-1]} -> {pm25_values[i]} (aumento de {increase})")
-            return True, increase, pm25_values[i-1], pm25_values[i]
+        print(f"[DEBUG] Comparando: {pm25_values[i-1]} -> {pm25_values[i]} (aumento: {increase})")
+        if increase >= 15 and increase > max_increase:
+            max_increase = increase
+            max_previous = pm25_values[i-1]
+            max_current = pm25_values[i]
     
+    if max_increase >= 15:
+        print(f"[INFO] Aumento drástico detectado: {max_previous} -> {max_current} (aumento de {max_increase})")
+        return True, max_increase, max_previous, max_current
+    
+    print(f"[DEBUG] Nenhum aumento drástico detectado (limiar: 15)")
     return False, None, None, None
 
 def compute_desired_state():
