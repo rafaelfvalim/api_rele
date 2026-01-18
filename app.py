@@ -83,6 +83,30 @@ def fetch_pm25_data():
         print(f"[ERROR] Erro ao buscar dados da API externa: {e}")
         return None
 
+def fetch_pm25_data_by_range(start_date, end_date):
+    """
+    Busca dados de pm25 da API externa por range de datas.
+    Retorna (labels, pm25_values) ou (None, None) em caso de erro.
+    """
+    try:
+        url = f"{EXTERNAL_API_URL}?start={start_date}&end={end_date}&api_key={EXTERNAL_API_KEY}"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("ok") and "series" in data and "labels" in data:
+            labels = data.get("labels", [])
+            pm25_values = data["series"].get("pm25", [])
+            # Remove valores None e mantém correspondência com labels
+            filtered_data = [(label, float(val)) for label, val in zip(labels, pm25_values) if val is not None]
+            if filtered_data:
+                labels_filtered, values_filtered = zip(*filtered_data)
+                return list(labels_filtered), list(values_filtered)
+        return None, None
+    except Exception as e:
+        print(f"[ERROR] Erro ao buscar dados da API externa por range: {e}")
+        return None, None
+
 def detect_drastic_increase(pm25_values):
     """
     Detecta aumento drástico de 15 ou mais no pm25 entre leituras consecutivas.
@@ -116,6 +140,29 @@ def detect_drastic_increase(pm25_values):
     
     print(f"[DEBUG] Nenhum aumento drástico detectado (limiar: 15)")
     return False, None, None, None
+
+def find_all_drastic_increases(labels, pm25_values):
+    """
+    Encontra todos os aumentos drásticos de 15 ou mais no pm25.
+    Retorna lista de ocorrências com timestamp, valor anterior, valor atual e aumento.
+    """
+    if not pm25_values or len(pm25_values) < 2:
+        return []
+    
+    occurrences = []
+    
+    for i in range(1, len(pm25_values)):
+        increase = pm25_values[i] - pm25_values[i-1]
+        if increase >= 15:
+            occurrence = {
+                "timestamp": labels[i] if i < len(labels) else None,
+                "previous_value": pm25_values[i-1],
+                "current_value": pm25_values[i],
+                "increase": increase
+            }
+            occurrences.append(occurrence)
+    
+    return occurrences
 
 def compute_desired_state():
     """
@@ -212,6 +259,54 @@ def post_rele():
     STATE["last_seen"] = datetime.now().isoformat(timespec="seconds")
 
     return jsonify(ok=True, desired=STATE["desired"], recorded=True), 200
+
+@app.get("/rele/picos")
+def get_picos():
+    """
+    Retorna os picos de aumento drástico de pm2.5 em um range de datas.
+    Parâmetros: start (data inicial), end (data final), api_key
+    """
+    is_valid, _ = _validate_api_key()
+    if not is_valid:
+        return jsonify(
+            ok=False, 
+            error="unauthorized",
+            hint="Envie api_key via querystring (?api_key=...), form, JSON ou header X-API-Key"
+        ), 401
+
+    # Obtém parâmetros de data
+    start_date = request.args.get("start")
+    end_date = request.args.get("end")
+    
+    if not start_date or not end_date:
+        return jsonify(
+            ok=False,
+            error="missing_parameters",
+            hint="Parâmetros 'start' e 'end' são obrigatórios. Formato: YYYY-MM-DDTHH:MM:SSZ ou YYYY-MM-DDTHH:MM:SS"
+        ), 400
+
+    # Busca dados da API externa por range de datas
+    labels, pm25_values = fetch_pm25_data_by_range(start_date, end_date)
+    
+    if labels is None or pm25_values is None:
+        return jsonify(
+            ok=False,
+            error="data_fetch_failed",
+            hint="Não foi possível buscar dados da API externa para o range de datas especificado"
+        ), 500
+
+    # Encontra todos os aumentos drásticos
+    occurrences = find_all_drastic_increases(labels, pm25_values)
+    
+    response_data = {
+        "ok": True,
+        "start_date": start_date,
+        "end_date": end_date,
+        "total_occurrences": len(occurrences),
+        "occurrences": occurrences
+    }
+    
+    return jsonify(response_data), 200
 
 if __name__ == "__main__":
     # Em produção, prefira gunicorn/uwsgi atrás de um proxy.
