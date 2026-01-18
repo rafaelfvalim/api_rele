@@ -141,16 +141,38 @@ def detect_drastic_increase(pm25_values):
     print(f"[DEBUG] Nenhum aumento drástico detectado (limiar: 15)")
     return False, None, None, None
 
+def parse_timestamp(ts_str):
+    """
+    Converte string de timestamp para datetime.
+    Aceita formatos ISO com ou sem Z.
+    """
+    if not ts_str:
+        return None
+    try:
+        # Remove Z se presente
+        ts_str = ts_str.rstrip('Z')
+        # Tenta diferentes formatos
+        for fmt in ["%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"]:
+            try:
+                return datetime.strptime(ts_str, fmt)
+            except ValueError:
+                continue
+        return datetime.fromisoformat(ts_str.replace('Z', ''))
+    except Exception:
+        return None
+
 def find_all_drastic_increases(labels, pm25_values):
     """
     Encontra todos os aumentos drásticos de 15 ou mais no pm25.
+    Agrupa ocorrências próximas (dentro de 5 minutos) e retorna apenas o primeiro de cada sequência.
     Retorna lista de ocorrências com timestamp, valor anterior, valor atual e aumento.
     """
     if not pm25_values or len(pm25_values) < 2:
         return []
     
-    occurrences = []
+    all_occurrences = []
     
+    # Primeiro, encontra todos os aumentos drásticos
     for i in range(1, len(pm25_values)):
         increase = pm25_values[i] - pm25_values[i-1]
         if increase >= 15:
@@ -158,11 +180,56 @@ def find_all_drastic_increases(labels, pm25_values):
                 "timestamp": labels[i] if i < len(labels) else None,
                 "previous_value": pm25_values[i-1],
                 "current_value": pm25_values[i],
-                "increase": increase
+                "increase": increase,
+                "index": i
             }
-            occurrences.append(occurrence)
+            all_occurrences.append(occurrence)
     
-    return occurrences
+    if not all_occurrences:
+        return []
+    
+    # Agrupa ocorrências próximas (dentro de 5 minutos) e mantém apenas a primeira
+    filtered_occurrences = []
+    last_timestamp = None
+    
+    for occurrence in all_occurrences:
+        current_timestamp = parse_timestamp(occurrence["timestamp"])
+        
+        if current_timestamp is None:
+            # Se não conseguir parsear, adiciona de qualquer forma
+            filtered_occurrences.append({
+                "timestamp": occurrence["timestamp"],
+                "previous_value": occurrence["previous_value"],
+                "current_value": occurrence["current_value"],
+                "increase": occurrence["increase"]
+            })
+            last_timestamp = None
+            continue
+        
+        # Se é a primeira ocorrência ou está a mais de 5 minutos da anterior
+        if last_timestamp is None:
+            filtered_occurrences.append({
+                "timestamp": occurrence["timestamp"],
+                "previous_value": occurrence["previous_value"],
+                "current_value": occurrence["current_value"],
+                "increase": occurrence["increase"]
+            })
+            last_timestamp = current_timestamp
+        else:
+            # Calcula diferença em minutos
+            time_diff = (current_timestamp - last_timestamp).total_seconds() / 60
+            if time_diff > 5:
+                # Mais de 5 minutos de diferença, adiciona como nova ocorrência
+                filtered_occurrences.append({
+                    "timestamp": occurrence["timestamp"],
+                    "previous_value": occurrence["previous_value"],
+                    "current_value": occurrence["current_value"],
+                    "increase": occurrence["increase"]
+                })
+                last_timestamp = current_timestamp
+            # Se está dentro de 5 minutos, ignora (já temos a primeira da sequência)
+    
+    return filtered_occurrences
 
 def compute_desired_state():
     """
