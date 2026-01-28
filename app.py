@@ -64,8 +64,8 @@ def _validate_api_key():
 
 def fetch_pm25_data():
     """
-    Busca dados de pm25 da API externa.
-    Retorna lista de valores de pm25 ou None em caso de erro.
+    Busca dados de pm2_5 da API externa (tabela entries_sps30).
+    Retorna lista de valores de pm2_5 ou None em caso de erro.
     """
     try:
         url = f"{EXTERNAL_API_URL}?last_minutes=15&api_key={EXTERNAL_API_KEY}"
@@ -74,7 +74,8 @@ def fetch_pm25_data():
         data = response.json()
         
         if data.get("ok") and "series" in data:
-            pm25_values = data["series"].get("pm25", [])
+            # Adaptado para nova estrutura: busca pm2_5 ao invés de pm25
+            pm25_values = data["series"].get("pm2_5", data["series"].get("pm25", []))
             # Remove valores None e converte para float
             pm25_values = [float(v) for v in pm25_values if v is not None]
             return pm25_values
@@ -85,7 +86,7 @@ def fetch_pm25_data():
 
 def fetch_pm25_data_by_range(start_date, end_date):
     """
-    Busca dados de pm25 da API externa por range de datas.
+    Busca dados de pm2_5 da API externa por range de datas (tabela entries_sps30).
     Retorna (labels, pm25_values) ou (None, None) em caso de erro.
     """
     try:
@@ -96,7 +97,8 @@ def fetch_pm25_data_by_range(start_date, end_date):
         
         if data.get("ok") and "series" in data and "labels" in data:
             labels = data.get("labels", [])
-            pm25_values = data["series"].get("pm25", [])
+            # Adaptado para nova estrutura: busca pm2_5 ao invés de pm25
+            pm25_values = data["series"].get("pm2_5", data["series"].get("pm25", []))
             # Remove valores None e mantém correspondência com labels
             filtered_data = [(label, float(val)) for label, val in zip(labels, pm25_values) if val is not None]
             if filtered_data:
@@ -109,7 +111,7 @@ def fetch_pm25_data_by_range(start_date, end_date):
 
 def detect_drastic_increase(pm25_values):
     """
-    Detecta aumento drástico de 15 ou mais no pm25 entre leituras consecutivas.
+    Detecta aumento drástico de 15 ou mais no pm2_5 entre leituras consecutivas.
     Verifica todos os aumentos e retorna o maior aumento encontrado.
     Retorna (True, aumento, valor_anterior, valor_atual) se detectar aumento drástico,
     (False, None, None, None) caso contrário.
@@ -118,7 +120,7 @@ def detect_drastic_increase(pm25_values):
         return False, None, None, None
     
     # Debug: mostra os valores recebidos
-    print(f"[DEBUG] Valores pm25 recebidos: {pm25_values}")
+    print(f"[DEBUG] Valores pm2_5 recebidos: {pm25_values}")
     print(f"[DEBUG] Total de valores: {len(pm25_values)}")
     
     # Verifica todos os aumentos consecutivos e encontra o maior
@@ -163,7 +165,7 @@ def parse_timestamp(ts_str):
 
 def find_all_drastic_increases(labels, pm25_values):
     """
-    Encontra todos os aumentos drásticos de 15 ou mais no pm25.
+    Encontra todos os aumentos drásticos de 15 ou mais no pm2_5.
     Agrupa ocorrências próximas (dentro de 5 minutos) e retorna apenas o primeiro de cada sequência.
     Retorna lista de ocorrências com timestamp, valor anterior, valor atual e aumento.
     """
@@ -250,7 +252,7 @@ def get_rele():
             hint="Envie api_key via querystring (?api_key=...), form, JSON ou header X-API-Key"
         ), 401
 
-    # Busca dados de pm25 para análise
+    # Busca dados de pm2_5 para análise (tabela entries_sps30)
     pm25_values = fetch_pm25_data()
     has_drastic_increase = False
     increase_amount = None
@@ -266,7 +268,7 @@ def get_rele():
         STATE["manual_desired_used"] = True  # Marca como usado
         # Mantém o desired atual (definido pelo POST)
     else:
-        # A partir da segunda execução: recalcula baseado na detecção de pm25
+        # A partir da segunda execução: recalcula baseado na detecção de pm2_5
         if pm25_values:
             # Se detecta aumento drástico, desired é "on", caso contrário é "off"
             if has_drastic_increase:
@@ -330,7 +332,7 @@ def post_rele():
 @app.get("/rele/picos")
 def get_picos():
     """
-    Retorna os picos de aumento drástico de pm2.5 em um range de datas.
+    Retorna os picos de aumento drástico de pm2_5 em um range de datas (tabela entries_sps30).
     Parâmetros: start (data inicial), end (data final), api_key
     """
     is_valid, _ = _validate_api_key()
