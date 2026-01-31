@@ -111,7 +111,7 @@ def fetch_pm25_data_by_range(start_date, end_date):
 
 def detect_drastic_increase(pm25_values):
     """
-    Detecta aumento drástico de 15 ou mais no pm2_5 entre leituras consecutivas.
+    Detecta aumento drástico de 5 ou mais no pm2_5 entre leituras consecutivas.
     Verifica todos os aumentos e retorna o maior aumento encontrado.
     Retorna (True, aumento, valor_anterior, valor_atual) se detectar aumento drástico,
     (False, None, None, None) caso contrário.
@@ -131,16 +131,16 @@ def detect_drastic_increase(pm25_values):
     for i in range(1, len(pm25_values)):
         increase = pm25_values[i] - pm25_values[i-1]
         print(f"[DEBUG] Comparando: {pm25_values[i-1]} -> {pm25_values[i]} (aumento: {increase})")
-        if increase >= 15 and increase > max_increase:
+        if increase >= 5 and increase > max_increase:
             max_increase = increase
             max_previous = pm25_values[i-1]
             max_current = pm25_values[i]
     
-    if max_increase >= 15:
+    if max_increase >= 5:
         print(f"[INFO] Aumento drástico detectado: {max_previous} -> {max_current} (aumento de {max_increase})")
         return True, max_increase, max_previous, max_current
     
-    print(f"[DEBUG] Nenhum aumento drástico detectado (limiar: 15)")
+    print(f"[DEBUG] Nenhum aumento drástico detectado (limiar: 5)")
     return False, None, None, None
 
 def parse_timestamp(ts_str):
@@ -165,7 +165,7 @@ def parse_timestamp(ts_str):
 
 def find_all_drastic_increases(labels, pm25_values):
     """
-    Encontra todos os aumentos drásticos de 15 ou mais no pm2_5.
+    Encontra todos os aumentos drásticos de 5 ou mais no pm2_5.
     Agrupa ocorrências próximas (dentro de 5 minutos) e retorna apenas o primeiro de cada sequência.
     Retorna lista de ocorrências com timestamp, valor anterior, valor atual e aumento.
     """
@@ -177,7 +177,7 @@ def find_all_drastic_increases(labels, pm25_values):
     # Primeiro, encontra todos os aumentos drásticos
     for i in range(1, len(pm25_values)):
         increase = pm25_values[i] - pm25_values[i-1]
-        if increase >= 15:
+        if increase >= 5:
             occurrence = {
                 "timestamp": labels[i] if i < len(labels) else None,
                 "previous_value": pm25_values[i-1],
